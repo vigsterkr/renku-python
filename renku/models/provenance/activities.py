@@ -27,7 +27,9 @@ from renku.models import _jsonld as jsonld
 from renku.models.cwl import WORKFLOW_STEP_RUN_TYPES
 from renku.models.cwl._ascwl import CWLClass
 from renku.models.cwl.types import PATH_OBJECTS
+from renku.version import __version__
 
+from .agents import SoftwareAgent
 from .entities import Collection, CommitMixin, Entity, Process, Workflow
 from .qualified import Association, Generation, Usage
 
@@ -99,6 +101,16 @@ class Activity(CommitMixin):
         },
         kw_only=True,
     )
+
+    agent = jsonld.ib(context='prov:agent', kw_only=True)
+
+    @agent.default
+    def default_agent(self):
+        """Set the default agent."""
+        return SoftwareAgent(
+            label='renku {0}'.format(__version__),
+            id='mailto:renku+{0}@datascience.ch'.format(__version__),
+        )
 
     @generated.default
     def default_generated(self):
