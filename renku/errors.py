@@ -222,6 +222,10 @@ class OutputsNotFound(RenkuException, click.ClickException):
         super(OutputsNotFound, self).__init__(msg)
 
 
+class InvalidInputPath(RenkuException, click.ClickException):
+    """Raise when input path does not exist or is not in the repository."""
+
+
 class InvalidSuccessCode(RenkuException, click.ClickException):
     """Raise when the exit-code is not 0 or redefined."""
 

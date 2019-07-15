@@ -159,6 +159,11 @@ class CommandLineToolFactory(object):
         if isinstance(cmd, (list, tuple)) else shlex.split(cmd),
     )
 
+    explicit_inputs = attr.ib(
+        default=[],
+        converter=lambda paths: [Path(path).resolve() for path in paths]
+    )
+
     directory = attr.ib(
         default='.',
         converter=lambda path: Path(path).resolve(),
@@ -186,6 +191,20 @@ class CommandLineToolFactory(object):
         self.inputs = []
         self.outputs = []
 
+        for input_ in self.explicit_inputs:
+            try:
+                input_.relative_to(self.directory)
+                if not input_.exists():
+                    raise errors.InvalidInputPath(
+                        'The input file/directory does not exist.'
+                        '\n\n\t' + click.style(str(input_), fg='yellow')
+                    )
+            except ValueError:
+                raise errors.InvalidInputPath(
+                    'The input file/directory is not within the repository.'
+                    '\n\n\t' + click.style(str(input_), fg='yellow')
+                )
+
         if self.stdin:
             input_ = next(
                 self.guess_inputs(str(self.working_dir / self.stdin))
@@ -209,11 +228,37 @@ class CommandLineToolFactory(object):
                     )
                 )
 
-        for input_ in self.guess_inputs(*detect):
+        explicit_inputs = self.explicit_inputs.copy()
+
+        for position, input_ in enumerate(self.guess_inputs(*detect)):
             if isinstance(input_, CommandLineBinding):
                 self.arguments.append(input_)
             else:
+                if explicit_inputs and input_.type in PATH_OBJECTS:
+                    try:
+                        input_path = input_.default.path.resolve()
+                        explicit_inputs.remove(input_path)
+                    except ValueError:
+                        pass
                 self.inputs.append(input_)
+
+        position += 1
+
+        for input_ in explicit_inputs:
+            position += 1
+            default, type, _ = self.guess_type(input_)
+            assert type in PATH_OBJECTS
+            input_ = CommandInputParameter(
+                id='input_{0}'.format(position),
+                type=type,
+                default=default,
+                inputBinding=dict(
+                    position=position,
+                    itemSeparator=None,
+                    prefix=None
+                )
+            )
+            self.inputs.append(input_)
 
     def generate_tool(self):
         """Return an instance of command line tool."""

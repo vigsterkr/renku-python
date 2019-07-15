@@ -135,6 +135,12 @@ from ._options import option_isolation
 
 @click.command(context_settings=dict(ignore_unknown_options=True, ))
 @click.option(
+    'inputs',
+    '--input',
+    multiple=True,
+    help='Force a path to be considered as an input.',
+)
+@click.option(
     'outputs',
     '--output',
     multiple=True,
@@ -162,12 +168,13 @@ from ._options import option_isolation
     commit=True,
     ignore_std_streams=True,
 )
-def run(client, outputs, no_output, success_codes, isolation, command_line):
+def run(client, inputs, outputs, no_output, success_codes, isolation, command_line):
     """Tracking work on a specific problem."""
     working_dir = client.repo.working_dir
     mapped_std = _mapped_std_streams(client.candidate_paths)
     factory = CommandLineToolFactory(
         command_line=command_line,
+        explicit_inputs=inputs,
         directory=os.getcwd(),
         working_dir=working_dir,
         successCodes=success_codes,
