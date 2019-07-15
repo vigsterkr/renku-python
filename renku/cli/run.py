@@ -175,6 +175,7 @@ def run(client, inputs, outputs, no_output, success_codes, isolation, command_li
     factory = CommandLineToolFactory(
         command_line=command_line,
         explicit_inputs=inputs,
+        explicit_outputs=outputs,
         directory=os.getcwd(),
         working_dir=working_dir,
         successCodes=success_codes,

@@ -163,6 +163,10 @@ class CommandLineToolFactory(object):
         default=[],
         converter=lambda paths: [Path(path).resolve() for path in paths]
     )
+    explicit_outputs = attr.ib(
+        default=[],
+        converter=lambda paths: [Path(path).resolve() for path in paths]
+    )
 
     directory = attr.ib(
         default='.',
@@ -186,24 +190,33 @@ class CommandLineToolFactory(object):
 
     def __attrs_post_init__(self):
         """Derive basic informations."""
+
+        def make_sure_paths_are_within_repository(paths):
+            for path in paths:
+                try:
+                    path.relative_to(self.directory)
+                except ValueError:
+                    raise errors.InvalidOutputPath(
+                        'The file/directory is not within the repository.'
+                        '\n\n\t' + click.style(str(path), fg='yellow')
+                    )
+
+        def make_sure_paths_exist(paths):
+            for path in paths:
+                if not path.exists():
+                    raise errors.InvalidInputPath(
+                        'The file/directory does not exist.'
+                        '\n\n\t' + click.style(str(path), fg='yellow')
+                    )
+
         self.baseCommand, detect = self.split_command_and_args()
         self.arguments = []
         self.inputs = []
         self.outputs = []
 
-        for input_ in self.explicit_inputs:
-            try:
-                input_.relative_to(self.directory)
-                if not input_.exists():
-                    raise errors.InvalidInputPath(
-                        'The input file/directory does not exist.'
-                        '\n\n\t' + click.style(str(input_), fg='yellow')
-                    )
-            except ValueError:
-                raise errors.InvalidInputPath(
-                    'The input file/directory is not within the repository.'
-                    '\n\n\t' + click.style(str(input_), fg='yellow')
-                )
+        make_sure_paths_are_within_repository(self.explicit_inputs)
+        make_sure_paths_exist(self.explicit_inputs)
+        make_sure_paths_are_within_repository(self.explicit_outputs)
 
         if self.stdin:
             input_ = next(
@@ -279,18 +292,24 @@ class CommandLineToolFactory(object):
         tool = self.generate_tool()
         repo = client.repo
 
-        if outputs:
-            directories = [
-                output for output in outputs if Path(output).is_dir()
-            ]
+        # print("===== RUN", repo)
 
-            client.repo.git.rm(
-                *outputs, r=True, force=True, ignore_unmatch=True
-            )
-            client.repo.index.commit('renku: automatic removal of outputs')
+        # if outputs:
+        #     """
+        #     TODO include file parent dir here as well, because when a directory
+        #     has a single file in it, the directory will be deleted as well.
+        #     """
+        #     directories = [
+        #         output for output in outputs if Path(output).is_dir()
+        #     ]
 
-            for directory in directories:
-                Path(directory).mkdir(parents=True, exist_ok=True)
+        #     client.repo.git.rm(
+        #         *outputs, r=True, force=True, ignore_unmatch=True
+        #     )
+        #     client.repo.index.commit('renku: automatic removal of outputs')
+
+        #     for directory in directories:
+        #         Path(directory).mkdir(parents=True, exist_ok=True)
 
         # NOTE consider to use git index instead
         existing_directories = {
@@ -318,7 +337,31 @@ class CommandLineToolFactory(object):
             inputs = {input.id: input for input in self.inputs}
             outputs = list(tool.outputs)
 
+            print("===== RUN TOOL OUTPUTS", outputs)
+
+            def get_explicit_output_parameters():
+                results = []
+                output_id = len(tool.outputs)
+                for path in self.explicit_outputs:
+                    output_id += 1
+                    relative_path = path.relative_to(self.directory)
+                    type = 'Directory' if path.is_dir() else 'File'
+                    results.append(CommandOutputParameter(
+                        id='output_{0}'.format(output_id),
+                        type=type,
+                        outputBinding=dict(glob=str(relative_path))
+                    ))
+                return results
+
+            outputs += get_explicit_output_parameters()
+            paths = self.explicit_outputs.copy()
+
             for output, input, path in self.guess_outputs(candidates):
+                if path in paths:
+                    # FIXME if path is already in explicit paths, remove it and add this one
+                    print("===== PATH WAS HERE", path)
+                    continue
+
                 outputs.append(output)
                 paths.append(path)
 
